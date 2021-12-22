@@ -2,63 +2,113 @@
 // ...with improved feature negotiation.
 
 import events from 'events';
-import { createConnection, Socket } from 'net';
+import { createConnection, Socket, SocketConnectOpts } from 'net';
+
+export interface SendOptions {
+  maxBufferLength?: number;
+  ors?: string;
+  timeout?: number;
+  waitFor?: string | RegExp | false;
+  waitfor?: string | RegExp | false;
+}
+
+export interface ConnectOptions extends SendOptions {
+  debug?: boolean;
+  echoLines?: number;
+  execTimeout?: number;
+  extSock?: any;
+  failedLoginMatch?: string | RegExp;
+  host?: string;
+  initialCTRLC?: boolean;
+  initialCtrlC?: boolean;
+  initialLFCR?: boolean;
+  irs?: string;
+  localAddress?: string;
+  loginPrompt?: string | RegExp;
+  negotiationMandatory?: boolean;
+  pageSeparator?: string | RegExp;
+  password?: string;
+  passwordPrompt?: string|RegExp;
+  port?: number;
+  sendTimeout?: number;
+  shellPrompt?: string | RegExp;
+  sock?: Socket;
+  socketConnectOptions?: SocketConnectOpts;
+  stripShellPrompt?: boolean;
+  username?: string;
+}
+
+const defaultOptions: ConnectOptions = {
+  debug: false,
+  echoLines: 1,
+  execTimeout: 2000,
+  host: '127.0.0.1',
+  initialCtrlC: false,
+  initialLFCR: false,
+  irs: '\r\n',
+  localAddress: '',
+  loginPrompt: /login[: ]*$/i,
+  maxBufferLength: 1048576,
+  negotiationMandatory: true,
+  ors: '\n',
+  pageSeparator: '---- More',
+  password: 'guest',
+  passwordPrompt: /password[: ]*$/i,
+  port: 23,
+  sendTimeout: 2000,
+  shellPrompt: /(?:\/ )?#\s/,
+  stripShellPrompt: true,
+  timeout: 2000,
+  username: 'root',
+  waitFor: false
+};
+
+Object.freeze(defaultOptions);
+
+function stringToRegex(opts: ConnectOptions): void {
+  ['failedLoginMatch', 'loginPrompt', 'passwordPrompt', 'shellPrompt', 'waitFor'].forEach(key =>
+    (opts as any)[key] = typeof (opts as any)[key] === 'string' ? new RegExp((opts as any)[key]) : (opts as any)[key]);
+}
 
 export class Telnet extends events.EventEmitter {
-  private extSock: any;
-  private initialCTRLC = false;
-  private initialLFCR = false;
-  private maxBufferLength: number;
-  private ors: string;
-  private sendTimeout: number;
+  private opts = Object.assign({}, defaultOptions);
   private socket: Socket;
-  private timeout: number;
-  private waitFor: RegExp;
 
-  connect(opts: any): Promise<void> {
+  connect(opts: ConnectOptions): Promise<void> {
     return new Promise<void>((resolve, reject) => {
       let promisePending = true;
       const rejectIt = (reason: any): void => { promisePending = false; reject(reason); };
       const resolveIt = (): void => { promisePending = false; resolve(); };
 
-      const host = (typeof opts.host !== 'undefined' ? opts.host : '127.0.0.1');
-      const port = (typeof opts.port !== 'undefined' ? opts.port : 23);
-      const localAddress = (typeof opts.localAddress !== 'undefined' ? opts.localAddress : '');
-      const socketConnectOptions = (typeof opts.socketConnectOptions !== 'undefined' ? opts.socketConnectOptions : {});
-      this.timeout = (typeof opts.timeout !== 'undefined' ? opts.timeout : 500);
+      Object.assign(this.opts, opts ?? {});
+      this.opts.initialCtrlC = opts.initialCTRLC && this.opts.initialCtrlC;
+      stringToRegex(this.opts);
 
-      this.extSock = (typeof opts.sock !== 'undefined' ? opts.sock : undefined);
-      this.ors = (typeof opts.ors !== 'undefined' ? opts.ors : '\n');
-      this.initialLFCR = (typeof opts.initialLFCR !== 'undefined' ? opts.initialLFCR : false);
-      this.initialCTRLC = (typeof opts.initialCTRLC !== 'undefined' ? opts.initialCTRLC : false);
-      this.sendTimeout = (typeof opts.sendTimeout !== 'undefined' ? opts.sendTimeout : 2000);
-      this.maxBufferLength = (typeof opts.maxBufferLength !== 'undefined' ? opts.maxBufferLength : 1048576);
-
-      /* if socket is provided and in good state, just reuse it */
-      if (this.extSock) {
-        if (!this._checkSocket())
+      // If socket is provided and in good state, just reuse it.
+      if (this.opts.extSock) {
+        if (!this.checkSocket(this.opts.extSock))
           return rejectIt(new Error('socket invalid'));
 
-        this.socket = this.extSock;
+        this.socket = this.opts.extSock;
         this.emit('ready');
 
         resolveIt();
       }
       else {
         this.socket = createConnection({
-          port,
-          host,
-          localAddress,
-          ...socketConnectOptions
+          port: this.opts.port,
+          host: this.opts.host,
+          localAddress: this.opts.localAddress,
+          ...this.opts.socketConnectOptions
         }, () => {
           this.emit('connect');
 
-          if (this.initialCTRLC === true) this.socket.write(Buffer.from('03', 'hex'));
-          if (this.initialLFCR === true) this.socket.write('\r\n');
+          if (this.opts.initialCtrlC === true) this.socket.write('\x03');
+          if (this.opts.initialLFCR === true) this.socket.write('\r\n');
         });
       }
 
-      this.socket.setTimeout(this.timeout, () => {
+      this.socket.setTimeout(this.opts.timeout, () => {
         if (promisePending) {
           /* if cannot connect, emit error and destroy */
           if (this.listeners('error').length > 0)
@@ -69,7 +119,7 @@ export class Telnet extends events.EventEmitter {
         }
 
         this.emit('timeout');
-        return reject(new Error('timeout'));
+        return reject(new Error('Timeout'));
       });
 
       this.socket.on('data', data => {
@@ -105,23 +155,25 @@ export class Telnet extends events.EventEmitter {
     });
   }
 
-  send(data: Buffer | string, opts?: any): Promise<void> {
-    return new Promise((resolve, reject) => {
-      if (opts && opts instanceof Object) {
-        this.ors = opts.ors || this.ors;
-        this.sendTimeout = opts.timeout || this.sendTimeout;
-        this.maxBufferLength = opts.maxBufferLength || this.maxBufferLength;
-        this.waitFor = (opts.waitFor ? (opts.waitFor instanceof RegExp ? opts.waitFor : RegExp(opts.waitFor)) : false);
-      }
+  async send(data: Buffer | string, opts?: SendOptions): Promise<void> {
+    this.opts.ors = opts?.ors || this.opts.ors;
+    data += this.opts.ors;
 
-      data += this.ors;
+    return this.write(data, opts);
+  }
+
+  async write(data: Buffer | string, opts?: SendOptions): Promise<void> {
+    return new Promise((resolve, reject) => {
+      Object.assign(this.opts, opts || {});
+      this.opts.waitFor = opts?.waitfor ?? opts?.waitFor ?? false;
+      stringToRegex(this.opts);
 
       if (this.socket.writable) {
         let response = '';
         const sendHandler = (data: Buffer): void => {
           response += data.toString();
 
-          if (this.waitFor && this.waitFor.test(response)) {
+          if (this.opts.waitFor instanceof RegExp && this.opts.waitFor.test(response)) {
             this.removeListener('data', sendHandler);
             resolve();
           }
@@ -131,7 +183,7 @@ export class Telnet extends events.EventEmitter {
 
         try {
           this.socket.write(data, () => {
-            if (!this.waitFor || !opts) {
+            if (!this.opts.waitFor || !opts) {
               setTimeout(() => {
                 if (response === '') {
                   this.socket.removeListener('data', sendHandler);
@@ -141,7 +193,7 @@ export class Telnet extends events.EventEmitter {
 
                 this.socket.removeListener('data', sendHandler);
                 resolve();
-              }, this.sendTimeout);
+              }, this.opts.sendTimeout);
             }
           });
         }
@@ -217,15 +269,15 @@ export class Telnet extends events.EventEmitter {
     return cmdData;
   }
 
-  _checkSocket(): boolean {
-    return this.extSock !== null &&
-      typeof this.extSock === 'object' &&
-      typeof this.extSock.pipe === 'function' &&
-      this.extSock.writable !== false &&
-      typeof this.extSock._write === 'function' &&
-      typeof this.extSock._writableState === 'object' &&
-      this.extSock.readable !== false &&
-      typeof this.extSock._read === 'function' &&
-      typeof this.extSock._readableState === 'object';
+  checkSocket(sock: any): boolean {
+    return sock !== null &&
+      typeof sock === 'object' &&
+      typeof sock.pipe === 'function' &&
+      sock.writable !== false &&
+      typeof sock._write === 'function' &&
+      typeof sock._writableState === 'object' &&
+      sock.readable !== false &&
+      typeof sock._read === 'function' &&
+      typeof sock._readableState === 'object';
   }
 }

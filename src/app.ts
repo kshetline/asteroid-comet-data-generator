@@ -13,7 +13,6 @@ import { Telnet } from './telnet';
       port: 6775,
       timeout: 2000000
     });
-    await new Promise(resolve => setTimeout(resolve, 500));
     await conn.send('?', { waitfor: 'Horizons> ' });
     await conn.send('x');
   }
