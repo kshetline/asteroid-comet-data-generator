@@ -3,7 +3,6 @@
 
 import events from 'events';
 import { createConnection, Socket, SocketConnectOpts } from 'net';
-import { QueryablePromise } from './queryable-promise';
 
 export interface SendOptions {
   maxBufferLength?: number;
@@ -78,10 +77,12 @@ export class Telnet extends events.EventEmitter {
   private opts = Object.assign({}, defaultOptions);
   private socket: Socket;
 
-  connect(opts: ConnectOptions): Promise<void> {
-    let promise: QueryablePromise<void>;
+  connect(opts: any): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      let connectionPending = true;
+      const rejectIt = (reason: any): void => { connectionPending = false; reject(reason); };
+      const resolveIt = (): void => { connectionPending = false; resolve(); };
 
-    return promise = new QueryablePromise<void>((resolve, reject) => {
       Object.assign(this.opts, opts ?? {});
       this.opts.initialCtrlC = opts.initialCTRLC && this.opts.initialCtrlC;
       stringToRegex(this.opts);
@@ -89,12 +90,12 @@ export class Telnet extends events.EventEmitter {
       // If socket is provided and in good state, just reuse it.
       if (this.opts.extSock) {
         if (!this.checkSocket(this.opts.extSock))
-          return reject(new Error('socket invalid'));
+          return rejectIt(new Error('socket invalid'));
 
         this.socket = this.opts.extSock;
         this.emit('ready');
 
-        resolve();
+        resolveIt();
       }
       else {
         this.socket = createConnection({
@@ -111,7 +112,7 @@ export class Telnet extends events.EventEmitter {
       }
 
       this.socket.setTimeout(this.opts.timeout, () => {
-        if (!promise.isSettled) {
+        if (connectionPending) {
           /* if cannot connect, emit error and destroy */
           if (this.listeners('error').length > 0)
             this.emit('error', 'Cannot connect');
@@ -121,13 +122,13 @@ export class Telnet extends events.EventEmitter {
         }
 
         this.emit('timeout');
-        return reject(new Error('Timeout'));
+        return reject(new Error('timeout'));
       });
 
       this.socket.on('data', data => {
         if ((data = this.parseData(data))) {
-          if (!promise.isSettled)
-            resolve();
+          if (connectionPending)
+            resolveIt();
 
           this.emit('data', data);
         }
@@ -137,22 +138,22 @@ export class Telnet extends events.EventEmitter {
         if (this.listeners('error').length > 0)
           this.emit('error', error);
 
-        if (!promise.isSettled)
-          reject(error);
+        if (connectionPending)
+          rejectIt(error);
       });
 
       this.socket.on('end', () => {
         this.emit('end');
 
-        if (!promise.isSettled)
-          reject(new Error('Socket ends'));
+        if (connectionPending)
+          rejectIt(new Error('Socket ends'));
       });
 
       this.socket.on('close', () => {
         this.emit('close');
 
-        if (!promise.isSettled)
-          reject(new Error('Socket closes'));
+        if (connectionPending)
+          rejectIt(new Error('Socket closes'));
       });
     });
   }
