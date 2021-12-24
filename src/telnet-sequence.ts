@@ -1,5 +1,6 @@
 import { ConnectOptions, Telnet } from './telnet';
 import { isString } from '@tubular/util';
+import { Emitter } from './emitter';
 
 export interface TelnetSequenceOptions extends ConnectOptions {
   echoToConsole?: boolean;
@@ -8,27 +9,6 @@ export interface TelnetSequenceOptions extends ConnectOptions {
 }
 
 export type TelnetSequenceSteps = { prompt: RegExp | string, response: string }[];
-
-class Emitter<T> {
-  private _resolve: any;
-  private pending: T[] = [];
-
-  emit(value: T): void {
-    if (this._resolve) {
-      this._resolve(value);
-      this._resolve = undefined;
-    }
-    else
-      this.pending.push(value);
-  }
-
-  async get(): Promise<T> {
-    if (this.pending.length > 0)
-      return this.pending.splice(0, 1)[0];
-
-    return new Promise<T>(resolve => this._resolve = resolve);
-  }
-}
 
 export class TelnetSequence {
   private step = 0;
@@ -120,13 +100,18 @@ export class TelnetSequence {
           ++this.step;
         }
 
+        // `connected` is modified, but asynchronously outside of this loop.
         // eslint-disable-next-line no-unmodified-loop-condition
         while (connected && (line = await lineSource.get()) !== null) {
           if (line instanceof Error) {
-            reject(line);
             checkSessionTimeout(false);
+            reject(line);
             return;
           }
+
+          while (this.step < this.steps.length &&
+                 this.steps[this.step].prompt == null && this.steps[this.step].response == null)
+            ++this.step;
 
           const prompt = this.steps[this.step]?.prompt;
 
@@ -139,7 +124,7 @@ export class TelnetSequence {
 
         checkSessionTimeout(false);
         resolve();
-      })();
+      })().catch(err => reject(err));
     });
   }
 

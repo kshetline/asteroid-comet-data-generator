@@ -5,11 +5,23 @@ import { TelnetSequence } from './telnet-sequence';
     host: 'horizons.jpl.nasa.gov',
     port: 6775,
     timeout: 30000,
+    sessionTimeout: 120000,
     echoToConsole: true,
     stripControls: true
   },
   [
-    { prompt: 'Horizons> ', response: '?' },
+    { prompt: 'Horizons> ', response: 'tty 99999 79' },
+    { prompt: 'Horizons> ', response: '90000033:' },
+    // { prompt: 'Continue [ <cr>=yes, n=no, ? ] : ', response: '' },
+    { prompt: '?,<cr>: ', response: 'E' },
+    { prompt: '[o,e,v,?] : ', response: 'e' },
+    { prompt: '[ ###, ? ] : ', response: '10' },
+    { prompt: '[eclip, frame, body ] : ', response: 'eclip' },
+    { prompt: /00:\d\d] : $/, response: '2021-12-01' },
+    { prompt: /:\d\d] : $/, response: '2021-12-31' },
+    { prompt: '? ] : ', response: '1d' },
+    { prompt: '?] : ', response: '' },
+    { prompt: '[R]edisplay, ? : ', response: 'N' },
     { prompt: 'Horizons> ', response: 'x' }
   ]);
 
@@ -25,5 +37,6 @@ import { TelnetSequence } from './telnet-sequence';
   }
   catch (err) {
     console.error(err);
+    process.exit(1);
   }
 })();
