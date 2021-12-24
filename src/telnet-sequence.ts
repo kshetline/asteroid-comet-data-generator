@@ -60,61 +60,12 @@ export class TelnetSequence {
         }, this.opts.sessionTimeout);
       }
     };
-    const processEscapesAndControls = (s: string): string => {
-      let result = '';
-      let startEscape = false;
-      let inEscape = false;
-      let gotEscape = false;
-      let escSequence = '';
-
-      for (const ch of s.split('')) {
-        if (startEscape) {
-          escSequence += ch;
-          startEscape = false;
-
-          if (ch === '[')
-            inEscape = true;
-          else
-            gotEscape = true;
-        }
-        else if (inEscape) {
-          escSequence += ch;
-
-          if (/[a-z]/i.test(ch)) {
-            inEscape = false;
-            gotEscape = true;
-          }
-        }
-        else if (ch === '\x1B') {
-          escSequence = ch;
-          startEscape = true;
-        }
-        else if (!this.opts.stripControls || ch.charCodeAt(0) >= 32 || /[\t\r\n]/.test(ch)) {
-          result += ch;
-        }
-
-        if (gotEscape) {
-          gotEscape = false;
-
-          if (escapeHandler) {
-            const response = escapeHandler(escSequence);
-
-            if (response)
-              telnet.write(response);
-          }
-
-          if (!this.opts.stripControls)
-            result += escSequence;
-        }
-      }
-
-      return result;
-    };
 
     this._telnet = telnet;
 
     telnet.on('data', data => {
-      data = processEscapesAndControls(data.toString().replace(/\r\r\n/g, '\n').replace(/\r\n?/g, '\n'));
+      data = this.processEscapesAndControls(data.toString()
+        .replace(/\r\r\n/g, '\n').replace(/\r\n?/g, '\n'), escapeHandler);
       buffer += data;
 
       if (this.opts.echoToConsole)
@@ -191,6 +142,57 @@ export class TelnetSequence {
       })();
     });
   }
+
+  private processEscapesAndControls(s: string, escapeHandler?: (escapeSequence: string) => string | null): string {
+    let result = '';
+    let startEscape = false;
+    let inEscape = false;
+    let gotEscape = false;
+    let escSequence = '';
+
+    for (const ch of s.split('')) {
+      if (startEscape) {
+        escSequence += ch;
+        startEscape = false;
+
+        if (ch === '[')
+          inEscape = true;
+        else
+          gotEscape = true;
+      }
+      else if (inEscape) {
+        escSequence += ch;
+
+        if (/[a-z]/i.test(ch)) {
+          inEscape = false;
+          gotEscape = true;
+        }
+      }
+      else if (ch === '\x1B') {
+        escSequence = ch;
+        startEscape = true;
+      }
+      else if (!this.opts.stripControls || ch.charCodeAt(0) >= 32 || /[\t\r\n]/.test(ch)) {
+        result += ch;
+      }
+
+      if (gotEscape) {
+        gotEscape = false;
+
+        if (escapeHandler) {
+          const response = escapeHandler(escSequence);
+
+          if (response)
+            this.telnet?.write(response);
+        }
+
+        if (!this.opts.stripControls)
+          result += escSequence;
+      }
+    }
+
+    return result;
+  };
 
   get telnet(): Telnet { return this._telnet; }
 }
