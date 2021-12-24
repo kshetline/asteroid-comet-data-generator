@@ -1,25 +1,21 @@
-import { Telnet } from './telnet';
+import { TelnetSequence } from './telnet-sequence';
 
 (async function (): Promise<void> {
-  const conn = new Telnet();
-
-  conn.on('connect', () => console.log('connect'));
-  conn.on('ready', () => console.log('ready'));
-  conn.on('data', data => console.log('data:', data.toString()));
+  const ts = new TelnetSequence({
+    host: 'horizons.jpl.nasa.gov',
+    port: 6775,
+    timeout: 30000,
+    echoToConsole: true
+  },
+  [
+    { prompt: 'Horizons> ', response: '?' },
+    { prompt: 'Horizons> ', response: 'x' }
+  ]);
 
   try {
-    await conn.connect({
-      host: 'horizons.jpl.nasa.gov',
-      port: 6775,
-      timeout: 2000000
-    });
-    await conn.send('?', { waitfor: 'Horizons> ' });
-    await conn.send('x');
+    await ts.process(_line => false);
   }
   catch (err) {
     console.error(err);
-  }
-  finally {
-    await conn.end();
   }
 })();
