@@ -173,13 +173,21 @@ export class Telnet extends events.EventEmitter {
 
       if (this.socket.writable) {
         let response = '';
+        let sendTimer: any;
         const sendHandler = (data: Buffer): void => {
           response += data.toString();
 
-          if (this.opts.waitFor instanceof RegExp && this.opts.waitFor.test(response)) {
-            this.removeListener('data', sendHandler);
-            resolve();
+          if (sendTimer)
+            clearTimeout(sendTimer);
+
+          if (this.opts.waitFor instanceof RegExp) {
+            if (this.opts.waitFor.test(response)) {
+              this.removeListener('data', sendHandler);
+              resolve();
+            }
           }
+          else
+            resolve();
         };
 
         this.socket.on('data', sendHandler);
@@ -187,7 +195,9 @@ export class Telnet extends events.EventEmitter {
         try {
           this.socket.write(data, () => {
             if (!this.opts.waitFor || !opts) {
-              setTimeout(() => {
+              sendTimer = setTimeout(() => {
+                sendTimer = undefined;
+
                 if (response === '') {
                   this.socket.removeListener('data', sendHandler);
                   reject(new Error('response not received'));

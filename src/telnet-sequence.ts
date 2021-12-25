@@ -4,6 +4,7 @@ import { Emitter } from './emitter';
 
 export interface TelnetSequenceOptions extends ConnectOptions {
   echoToConsole?: boolean;
+  lineCompletionDelay?: number;
   sessionTimeout?: number;
   stripControls?: boolean;
 }
@@ -18,6 +19,7 @@ export class TelnetSequence {
     private opts: TelnetSequenceOptions,
     private steps: TelnetSequenceSteps
   ) {
+    this.opts.lineCompletionDelay = opts.lineCompletionDelay ?? 50;
     this.opts.sessionTimeout = opts.sessionTimeout ?? 60000;
   }
 
@@ -28,6 +30,7 @@ export class TelnetSequence {
     let buffer = '';
     let connected = false;
     let sessionTimer: any;
+    let lineTimer: any;
     const checkSessionTimeout = (restart = true): void => {
       if (sessionTimer)
         clearTimeout(sessionTimer);
@@ -44,6 +47,11 @@ export class TelnetSequence {
     this._telnet = telnet;
 
     telnet.on('data', data => {
+      if (lineTimer) {
+        clearTimeout(lineTimer);
+        lineTimer = undefined;
+      }
+
       data = this.processEscapesAndControls(data.toString()
         .replace(/\r\r\n/g, '\n').replace(/\r\n?/g, '\n'), escapeHandler);
       buffer += data;
@@ -60,10 +68,18 @@ export class TelnetSequence {
         buffer = buffer.substring(pos + 1);
       }
 
-      if (buffer)
-        lineSource.emit(buffer);
+      if (buffer) {
+        lineTimer = setTimeout(() => {
+          lineTimer = undefined;
 
-      buffer = '';
+          if (buffer) {
+            lineSource.emit(buffer);
+            buffer = '';
+            checkSessionTimeout();
+          }
+        }, this.opts.lineCompletionDelay);
+      }
+
       checkSessionTimeout();
     });
 

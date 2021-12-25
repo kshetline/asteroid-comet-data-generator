@@ -17,14 +17,12 @@ interface BodyInfo {
 
 interface ObjectInfoMod {
   epoch: string;
-  a: number;
   q: number;
   e: number;
   i: number;
   w: number;
   L: number;
   Tp: number;
-  n: number;
 }
 
 interface BodyAndElements {
@@ -66,7 +64,7 @@ async function getBodyData(name: string, designation: string, isAsteroid: boolea
     stripControls: true
   },
   [
-    { prompt: 'Horizons> ', response: 'tty 99999 79' },
+    { prompt: 'Horizons> ', response: 'tty 99999 80' },
     { prompt: 'Horizons> ', response: designation },
     des ?
       { prompt: 'Continue [ <cr>=yes, n=no, ? ] : ', response: '' } :
@@ -93,8 +91,8 @@ async function getBodyData(name: string, designation: string, isAsteroid: boolea
     let refOI: ObjectInfo = null;
     let lastOI: ObjectInfo = null;
     let physicalParams = false;
-    let H = Number.NEGATIVE_INFINITY;
-    let G = Number.NEGATIVE_INFINITY;
+    let H: number = null;
+    let G: number = null;
     let $: RegExpExecArray;
     let fieldMatches = 0;
     let fieldsNeeded = 0;
@@ -103,8 +101,21 @@ async function getBodyData(name: string, designation: string, isAsteroid: boolea
     const byMonth = (interval === '1 MO');
     let startOfTrouble: string = null;
     const troubleSpots: string[] = [];
+    let partialLine = '';
 
-    while ((line = (await lineSource.get())?.trim()) !== null) {
+    while ((line = await lineSource.get()) !== null) {
+      line = partialLine + line;
+      partialLine = '';
+      const pos = line.indexOf('\n');
+
+      if (pos < 0) {
+        partialLine = line;
+        continue;
+      }
+
+      partialLine = line.substring(pos + 1);
+      line = line.substring(0, pos);
+
       if (line === '$$EOE')
         break;
 
@@ -115,19 +126,19 @@ async function getBodyData(name: string, designation: string, isAsteroid: boolea
             body.name = name;
             body.designation = designation;
 
-            if (isAsteroid && H !== Number.NEGATIVE_INFINITY && G !== Number.NEGATIVE_INFINITY) {
+            if (isAsteroid && H != null && G != null) {
               body.H = H;
               body.G = G;
             }
           }
           else if (physicalParams) {
-            if (H === Number.NEGATIVE_INFINITY && ($ = h_Pattern.exec(line)))
+            if (H == null && ($ = h_Pattern.exec(line)))
               H = toNumber($[1]);
 
-            if (G === Number.NEGATIVE_INFINITY && ($ = g_Pattern.exec(line)))
+            if (G == null && ($ = g_Pattern.exec(line)))
               G = toNumber($[1]);
 
-            if (H !== Number.NEGATIVE_INFINITY && G !== Number.NEGATIVE_INFINITY)
+            if (H != null && G != null)
               physicalParams = false;
           }
           else if (isAsteroid && line.includes('Asteroid physical parameters'))
@@ -139,7 +150,6 @@ async function getBodyData(name: string, designation: string, isAsteroid: boolea
 
           if ($) {
             oi = { epoch: toNumber($[1]) } as ObjectInfo;
-            oi.q = oi.e = oi.i = oi.ω = oi.L = oi.Tp = oi.a = oi.n = Number.NEGATIVE_INFINITY;
             fieldMatches = 0;
             fieldsNeeded = 6;
             state = ReadState.IN_ELEMENTS;
@@ -147,12 +157,12 @@ async function getBodyData(name: string, designation: string, isAsteroid: boolea
           break;
 
         case ReadState.IN_ELEMENTS:
-          if (oi.q === Number.NEGATIVE_INFINITY && ($ = qrPattern.exec(line))) {
+          if (oi.q == null && ($ = qrPattern.exec(line))) {
             oi.q = toNumber($[1]);
             ++fieldMatches;
           }
 
-          if (oi.e === Number.NEGATIVE_INFINITY && ($ = ecPattern.exec(line))) {
+          if (oi.e == null && ($ = ecPattern.exec(line))) {
             oi.e = toNumber($[1]);
             ++fieldMatches;
 
@@ -160,32 +170,32 @@ async function getBodyData(name: string, designation: string, isAsteroid: boolea
               fieldsNeeded = 8;
           }
 
-          if (oi.i === Number.NEGATIVE_INFINITY && ($ = inPattern.exec(line))) {
+          if (oi.i == null && ($ = inPattern.exec(line))) {
             oi.i = toNumber($[1]);
             ++fieldMatches;
           }
 
-          if (oi.ω === Number.NEGATIVE_INFINITY && ($ = w_Pattern.exec(line))) {
+          if (oi.ω == null && ($ = w_Pattern.exec(line))) {
             oi.ω = toNumber($[1]);
             ++fieldMatches;
           }
 
-          if (oi.L === Number.NEGATIVE_INFINITY && ($ = omPattern.exec(line))) {
+          if (oi.L == null && ($ = omPattern.exec(line))) {
             oi.L = toNumber($[1]);
             ++fieldMatches;
           }
 
-          if (oi.Tp === Number.NEGATIVE_INFINITY && ($ = tpPattern.exec(line))) {
+          if (oi.Tp == null && ($ = tpPattern.exec(line))) {
             oi.Tp = toNumber($[1]);
             ++fieldMatches;
           }
 
-          if (oi.a === Number.NEGATIVE_INFINITY && ($ = a_Pattern.exec(line))) {
+          if (oi.a == null && ($ = a_Pattern.exec(line))) {
             oi.a = toNumber($[1]);
             ++fieldMatches;
           }
 
-          if (oi.n === Number.NEGATIVE_INFINITY && ($ = n_Pattern.exec(line))) {
+          if (oi.n == null && ($ = n_Pattern.exec(line))) {
             oi.n = toNumber($[1]);
             ++fieldMatches;
           }
@@ -285,17 +295,19 @@ async function getBodyData(name: string, designation: string, isAsteroid: boolea
 
 (async function (): Promise<void> {
   try {
-    const results = await getBodyData('C/2021 A1 (Leonard)', '90004568:', false,
-      new DateTime('2000-01-01Z'), new DateTime('2022-01-01Z'), '1 MO') as any;
+    const results = await getBodyData('Ceres', '1;', true,
+      new DateTime('1921-01-01Z'), new DateTime('2121-12-01Z'), '1 MO') as any;
 
     results.elements = results.elements.map((elem: ObjectInfo) => {
-      const elemMod = Object.assign({}, elem) as any;
-
-      elemMod.epoch = getFormattedDateFromJulianDay(elem.epoch);
-      elemMod.w = elem.ω;
-      delete elemMod.ω;
-
-      return elemMod as ObjectInfoMod;
+      return {
+        epoch: getFormattedDateFromJulianDay(elem.epoch),
+        q: elem.q,
+        e: elem.e,
+        i: elem.i,
+        w: elem.ω,
+        L: elem.L,
+        Tp: elem.Tp
+      } as ObjectInfoMod;
     });
 
     console.log(JSON.stringify(results));
