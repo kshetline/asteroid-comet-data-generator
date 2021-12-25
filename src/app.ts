@@ -3,7 +3,7 @@ import ttime, { DateTime } from '@tubular/time';
 import { Emitter } from './emitter';
 import { toNumber } from '@tubular/util';
 import { AdditionalOrbitingObjects, EARTH, K_DEG, ObjectInfo, SolarSystem } from '@tubular/astronomy';
-import { abs, max, sqrt, Unit } from '@tubular/math';
+import { abs, max, sign, sqrt, Unit } from '@tubular/math';
 import millisFromJulianDay = ttime.millisFromJulianDay;
 
 enum ReadState { SEEK_START, SEEK_DATE, IN_ELEMENTS }
@@ -29,7 +29,7 @@ interface ObjectInfoMod {
 
 interface BodyAndElements {
   body: BodyInfo;
-  elements: ObjectInfoMod[];
+  elements: ObjectInfo[];
 }
 
 const solarSystem = new SolarSystem();
@@ -52,6 +52,9 @@ function getFormattedDateFromJulianDay(jd: number): string {
 
 async function getBodyData(name: string, designation: string, isAsteroid: boolean,
                            startDate: DateTime, endDate: DateTime, interval: string): Promise<BodyAndElements> {
+  let resolve: any;
+  let reject: any;
+  const result = new Promise<BodyAndElements>((_resolve, _reject) => { resolve = _resolve; reject = _reject; });
   const des = designation.startsWith('DES=');
   const lineSource = new Emitter<string | null>();
   const ts = new TelnetSequence({
@@ -231,6 +234,41 @@ async function getBodyData(name: string, designation: string, isAsteroid: boolea
           break;
       }
     }
+
+    if (startOfTrouble != null)
+      troubleSpots.push(getFormattedDateFromJulianDay(lastOI.epoch));
+
+    if (troubleSpots.length > 0) {
+      for (let i = 0; i < troubleSpots.length - 1; i += 2) {
+        const startDate = troubleSpots[i];
+        const endDate = troubleSpots[i + 1];
+
+        const sd = new DateTime(startDate + 'Z');
+        const sdJdu = sd.wallTime.jdu;
+        const ed = new DateTime(endDate + 'Z');
+        const edJdu = ed.wallTime.jdu;
+
+        // Remove original by-month info from trouble interval.
+        for (let j = elements.length - 1; j >= 0; --j) {
+          oi = elements[j];
+
+          if (sdJdu <= oi.epoch && oi.epoch < edJdu)
+            elements.splice(j, 1);
+        }
+
+        try {
+          const supplementalElements = (await getBodyData(name, designation, isAsteroid, sd, ed, '1 D')).elements;
+          elements.push(...supplementalElements);
+        }
+        catch (e) {
+          reject(e);
+        }
+      }
+
+      elements.sort((a, b) => sign(a.epoch - b.epoch));
+    }
+
+    resolve({ body, elements });
   });
 
   await ts.process(line => lineSource.emit(line), esc => {
@@ -242,9 +280,15 @@ async function getBodyData(name: string, designation: string, isAsteroid: boolea
       return null;
   });
 
-  return {
-    body,
-    elements: elements.map(elem => {
+  return result;
+}
+
+(async function (): Promise<void> {
+  try {
+    const results = await getBodyData('C/2021 A1 (Leonard)', '90004568:', false,
+      new DateTime('2000-01-01Z'), new DateTime('2022-01-01Z'), '1 MO') as any;
+
+    results.elements = results.elements.map((elem: ObjectInfo) => {
       const elemMod = Object.assign({}, elem) as any;
 
       elemMod.epoch = getFormattedDateFromJulianDay(elem.epoch);
@@ -252,13 +296,7 @@ async function getBodyData(name: string, designation: string, isAsteroid: boolea
       delete elemMod.ω;
 
       return elemMod as ObjectInfoMod;
-    })
-  };
-}
-
-(async function (): Promise<void> {
-  try {
-    const results = await getBodyData('Ceres', '1;', true, new DateTime('2000-01-01Z'), new DateTime('2022-01-01Z'), '1 MO');
+    });
 
     console.log(JSON.stringify(results));
   }
