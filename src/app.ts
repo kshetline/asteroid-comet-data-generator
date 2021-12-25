@@ -5,6 +5,8 @@ import { toNumber } from '@tubular/util';
 import { AdditionalOrbitingObjects, EARTH, K_DEG, ObjectInfo, SolarSystem } from '@tubular/astronomy';
 import { abs, max, sign, sqrt, Unit } from '@tubular/math';
 import millisFromJulianDay = ttime.millisFromJulianDay;
+import { readFile, writeFile } from 'fs/promises';
+import * as JSONZ from 'json-z';
 
 enum ReadState { SEEK_START, SEEK_DATE, IN_ELEMENTS }
 
@@ -295,22 +297,34 @@ async function getBodyData(name: string, designation: string, isAsteroid: boolea
 
 (async function (): Promise<void> {
   try {
-    const results = await getBodyData('Ceres', '1;', true,
-      new DateTime('1921-01-01Z'), new DateTime('2121-12-01Z'), '1 MO') as any;
+    const acListText = await readFile('src/asteroid-and-comet-list.json5', 'utf8');
+    const acList = JSONZ.parse(acListText);
 
-    results.elements = results.elements.map((elem: ObjectInfo) => {
-      return {
-        epoch: getFormattedDateFromJulianDay(elem.epoch),
-        q: elem.q,
-        e: elem.e,
-        i: elem.i,
-        w: elem.ω,
-        L: elem.L,
-        Tp: elem.Tp
-      } as ObjectInfoMod;
-    });
+    for (const bodyType of ['asteroids', 'comets']) {
+      const bodyList = acList[bodyType];
+      const results: any[] = [];
 
-    console.log(JSON.stringify(results));
+      for (let i = 0; i < bodyList.length; i += 2) {
+        const bodyData = await getBodyData(bodyList[i], bodyList[i + 1], bodyType === 'asteroids',
+          new DateTime('2010-01-01Z'), new DateTime('2030-12-01Z'), '1 MO') as any;
+
+        bodyData.elements = bodyData.elements.map((elem: ObjectInfo) => {
+          return {
+            epoch: getFormattedDateFromJulianDay(elem.epoch),
+            q: elem.q,
+            e: elem.e,
+            i: elem.i,
+            w: elem.ω,
+            L: elem.L,
+            Tp: elem.Tp
+          } as ObjectInfoMod;
+        });
+
+        results.push(bodyData);
+      }
+
+      await writeFile(bodyType + '.json', JSON.stringify(results));
+    }
   }
   catch (err) {
     console.error(err);
