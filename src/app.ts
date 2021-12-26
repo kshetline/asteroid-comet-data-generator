@@ -317,11 +317,10 @@ async function getBodyData(name: string, designation: string, isAsteroid: boolea
       const results: any[] = [];
 
       for (let i = 0; i < bodyList.length; i += 2) {
+        const name = bodyList[i];
         let gotData = false;
 
         for (let tries = 1; tries <= 5; ++tries) {
-          const name = bodyList[i];
-
           if (tries === 1)
             console.log(`Getting data for ${name}, ${bodyType.slice(0, -1)} ${(i / 2) + 1} of ${bodyList.length / 2}`);
           else
