@@ -111,6 +111,8 @@ export class Telnet extends events.EventEmitter {
         });
       }
 
+      this.socket.setMaxListeners(20);
+
       this.socket.setTimeout(this.opts.timeout, () => {
         if (connectionPending) {
           /* if cannot connect, emit error and destroy */

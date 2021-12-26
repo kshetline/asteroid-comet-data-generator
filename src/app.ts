@@ -3,7 +3,7 @@ import ttime, { DateTime } from '@tubular/time';
 import { Emitter } from './emitter';
 import { toNumber } from '@tubular/util';
 import { AdditionalOrbitingObjects, EARTH, K_DEG, ObjectInfo, SolarSystem } from '@tubular/astronomy';
-import { abs, max, sign, sqrt, Unit } from '@tubular/math';
+import { abs, floor, max, sign, sqrt, Unit } from '@tubular/math';
 import millisFromJulianDay = ttime.millisFromJulianDay;
 import { readFile, writeFile } from 'fs/promises';
 import * as JSONZ from 'json-z';
@@ -31,6 +31,8 @@ interface BodyAndElements {
   body: BodyInfo;
   elements: ObjectInfo[];
 }
+
+const YEAR_SPAN = 100;
 
 const solarSystem = new SolarSystem();
 
@@ -62,7 +64,7 @@ async function getBodyData(name: string, designation: string, isAsteroid: boolea
     port: 6775,
     timeout: 30000,
     sessionTimeout: 120000,
-    echoToConsole: true,
+    echoToConsole: false,
     stripControls: true
   },
   [
@@ -251,7 +253,13 @@ async function getBodyData(name: string, designation: string, isAsteroid: boolea
       troubleSpots.push(getFormattedDateFromJulianDay(lastOI.epoch));
 
     if (troubleSpots.length > 0) {
+      const ts = floor((troubleSpots.length + 1) / 2);
+
+      console.log(`    ${name} needs ${ts} batch${ts > 1 ? 'es' : ' of supplemental data.'}`);
+
       for (let i = 0; i < troubleSpots.length - 1; i += 2) {
+        console.log(`    Retrieving batch #${i / 2 + 1}`);
+
         const startDate = troubleSpots[i];
         const endDate = troubleSpots[i + 1];
 
@@ -296,6 +304,10 @@ async function getBodyData(name: string, designation: string, isAsteroid: boolea
 }
 
 (async function (): Promise<void> {
+  const currentYear = new DateTime(null, 'UTC').wallTime.year;
+  const startDate = new DateTime([currentYear - YEAR_SPAN, 1, 1], 'UTC');
+  const endDate = new DateTime([currentYear + YEAR_SPAN, 12, 1], 'UTC');
+
   try {
     const acListText = await readFile('src/asteroid-and-comet-list.json5', 'utf8');
     const acList = JSONZ.parse(acListText);
@@ -305,22 +317,49 @@ async function getBodyData(name: string, designation: string, isAsteroid: boolea
       const results: any[] = [];
 
       for (let i = 0; i < bodyList.length; i += 2) {
-        const bodyData = await getBodyData(bodyList[i], bodyList[i + 1], bodyType === 'asteroids',
-          new DateTime('2010-01-01Z'), new DateTime('2030-12-01Z'), '1 MO') as any;
+        let gotData = false;
 
-        bodyData.elements = bodyData.elements.map((elem: ObjectInfo) => {
-          return {
-            epoch: getFormattedDateFromJulianDay(elem.epoch),
-            q: elem.q,
-            e: elem.e,
-            i: elem.i,
-            w: elem.ω,
-            L: elem.L,
-            Tp: elem.Tp
-          } as ObjectInfoMod;
-        });
+        for (let tries = 1; tries <= 5; ++tries) {
+          const name = bodyList[i];
 
-        results.push(bodyData);
+          if (tries === 1)
+            console.log(`Getting data for ${name}, ${bodyType.slice(0, -1)} ${(i / 2) + 1} of ${bodyList.length / 2}`);
+          else
+            console.log(`* Attempt ${tries} to obtain data for ${name}`);
+
+          try {
+            const bodyData = await getBodyData(name, bodyList[i + 1], bodyType === 'asteroids',
+              startDate, endDate, '1 MO') as any;
+
+            bodyData.elements = bodyData?.elements?.map((elem: ObjectInfo) => {
+              return {
+                epoch: getFormattedDateFromJulianDay(elem.epoch),
+                q: elem.q,
+                e: elem.e,
+                i: elem.i,
+                w: elem.ω,
+                L: elem.L,
+                Tp: elem.Tp
+              } as ObjectInfoMod;
+            });
+
+            if (bodyData?.body && bodyData?.elements?.length > 0) {
+              results.push(bodyData);
+              gotData = true;
+              break;
+            }
+            else
+              console.error(`No data received for ${name}.`);
+          }
+          catch (e) {
+            console.error(`No data received for ${name}.`);
+          }
+        }
+
+        if (!gotData) {
+          console.error(`Failed to retrieve data for ${name}. Exiting.`);
+          process.exit(1);
+        }
       }
 
       await writeFile(bodyType + '.json', JSON.stringify(results));
