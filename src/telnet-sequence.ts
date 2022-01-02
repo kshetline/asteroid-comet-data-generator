@@ -1,6 +1,6 @@
 import { isString } from '@tubular/util';
 import { Emitter } from './emitter';
-import { ConnectOptions, Telnet } from 'telnet-client';
+import { ConnectOptions, Telnet } from 'telnet-client-ks';
 
 export interface TelnetSequenceOptions extends ConnectOptions {
   echoToConsole?: boolean;
