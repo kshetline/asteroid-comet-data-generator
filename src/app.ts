@@ -5,7 +5,7 @@ import { toNumber } from '@tubular/util';
 import { AdditionalOrbitingObjects, EARTH, K_DEG, ObjectInfo, SolarSystem } from '@tubular/astronomy';
 import { abs, floor, max, sign, sqrt, Unit } from '@tubular/math';
 import millisFromJulianDay = ttime.millisFromJulianDay;
-import { readFile, writeFile } from 'fs/promises';
+import { mkdir, readFile, writeFile } from 'fs/promises';
 import * as JSONZ from 'json-z';
 
 enum ReadState { SEEK_START, SEEK_DATE, IN_ELEMENTS }
@@ -52,6 +52,15 @@ function getFormattedDateFromJulianDay(jd: number): string {
   return new DateTime(millisFromJulianDay(jd), 'UTC').toIsoString(10);
 }
 
+function escapeHandler(esc: string): string {
+  if (esc === '\x1B[6n')
+    return '\x1B[24;80R';
+  else if (esc === '\x1B[7m') // This escape sequence (setting reverse video) precedes pausing at a paging prompt
+    return ' ';
+  else
+    return null;
+}
+
 async function getBodyData(name: string, designation: string, isAsteroid: boolean,
                            startDate: DateTime, endDate: DateTime, interval: string): Promise<BodyAndElements> {
   let resolve: any;
@@ -65,6 +74,7 @@ async function getBodyData(name: string, designation: string, isAsteroid: boolea
     timeout: 30000,
     sessionTimeout: 120000,
     echoToConsole: false,
+    escapeHandler,
     stripControls: true
   },
   [
@@ -255,7 +265,7 @@ async function getBodyData(name: string, designation: string, isAsteroid: boolea
     if (troubleSpots.length > 0) {
       const ts = floor((troubleSpots.length + 1) / 2);
 
-      console.log(`    ${name} needs ${ts} batch${ts > 1 ? 'es' : ' of supplemental data.'}`);
+      console.log(`    ${name} needs ${ts} batch${ts > 1 ? 'es' : ''} of supplemental data.`);
 
       for (let i = 0; i < troubleSpots.length - 1; i += 2) {
         console.log(`    Retrieving batch #${i / 2 + 1}`);
@@ -291,14 +301,7 @@ async function getBodyData(name: string, designation: string, isAsteroid: boolea
     resolve({ body, elements });
   });
 
-  await ts.process(line => lineSource.emit(line), esc => {
-    if (esc === '\x1B[6n')
-      return '\x1B[24;80R';
-    else if (esc === '\x1B[7m') // This escape sequence (setting reverse video) precedes pausing at a paging prompt
-      return ' ';
-    else
-      return null;
-  });
+  await ts.process(line => lineSource.emit(line));
 
   return result;
 }
@@ -327,7 +330,8 @@ async function getBodyData(name: string, designation: string, isAsteroid: boolea
             console.log(`* Attempt ${tries} to obtain data for ${name}`);
 
           try {
-            const bodyData = await getBodyData(name, bodyList[i + 1], bodyType === 'asteroids',
+            const designation = bodyList[i + 1] + (/\d$/.test(bodyList[i + 1]) ? ':' : '');
+            const bodyData = await getBodyData(name, designation, bodyType === 'asteroids',
               startDate, endDate, '1 MO') as any;
 
             bodyData.elements = bodyData?.elements?.map((elem: ObjectInfo) => {
@@ -361,7 +365,8 @@ async function getBodyData(name: string, designation: string, isAsteroid: boolea
         }
       }
 
-      await writeFile(bodyType + '.json', JSON.stringify(results));
+      await mkdir('output', { recursive: true });
+      await writeFile(`output/${bodyType}.json`, JSON.stringify(results));
     }
   }
   catch (err) {

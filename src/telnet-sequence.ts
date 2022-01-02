@@ -1,6 +1,6 @@
-import { ConnectOptions, Telnet } from './telnet';
 import { isString } from '@tubular/util';
 import { Emitter } from './emitter';
+import { ConnectOptions, Telnet } from 'telnet-client';
 
 export interface TelnetSequenceOptions extends ConnectOptions {
   echoToConsole?: boolean;
@@ -12,19 +12,25 @@ export interface TelnetSequenceOptions extends ConnectOptions {
 export type TelnetSequenceSteps = { prompt: RegExp | string, response: string }[];
 
 export class TelnetSequence {
+  private opts: TelnetSequenceOptions = {};
   private step = 0;
   private _telnet: Telnet;
 
   constructor(
-    private opts: TelnetSequenceOptions,
+    opts: TelnetSequenceOptions,
     private steps: TelnetSequenceSteps
   ) {
+    Object.assign(this.opts, opts);
     this.opts.lineCompletionDelay = opts.lineCompletionDelay ?? 50;
+    this.opts.sendTimeout = 300000;
+    this.opts.timeout = 300000;
     this.opts.sessionTimeout = opts.sessionTimeout ?? 60000;
+    this.opts.stripControls = true;
+    this.opts.shellPrompt = null;
+    this.opts.newlineReplace = '\n';
   }
 
-  async process(lineReceiver: (line: string) => boolean | void,
-                escapeHandler?: (escapeSequence: string) => string | null): Promise<void> {
+  async process(lineReceiver: (line: string) => boolean | void): Promise<void> {
     const telnet = new Telnet();
     const lineSource = new Emitter<Error | string | null>();
     let buffer = '';
@@ -52,9 +58,7 @@ export class TelnetSequence {
         lineTimer = undefined;
       }
 
-      data = this.processEscapesAndControls(data.toString()
-        .replace(/\r\r\n/g, '\n').replace(/\r\n?/g, '\n'), escapeHandler);
-      buffer += data;
+      buffer += data.toString();
 
       if (this.opts.echoToConsole)
         process.stdout.write(data);
@@ -143,57 +147,6 @@ export class TelnetSequence {
       })().catch(err => reject(err));
     });
   }
-
-  private processEscapesAndControls(s: string, escapeHandler?: (escapeSequence: string) => string | null): string {
-    let result = '';
-    let startEscape = false;
-    let inEscape = false;
-    let gotEscape = false;
-    let escSequence = '';
-
-    for (const ch of s.split('')) {
-      if (startEscape) {
-        escSequence += ch;
-        startEscape = false;
-
-        if (ch === '[')
-          inEscape = true;
-        else
-          gotEscape = true;
-      }
-      else if (inEscape) {
-        escSequence += ch;
-
-        if (/[a-z]/i.test(ch)) {
-          inEscape = false;
-          gotEscape = true;
-        }
-      }
-      else if (ch === '\x1B') {
-        escSequence = ch;
-        startEscape = true;
-      }
-      else if (!this.opts.stripControls || ch.charCodeAt(0) >= 32 || /[\t\r\n]/.test(ch)) {
-        result += ch;
-      }
-
-      if (gotEscape) {
-        gotEscape = false;
-
-        if (escapeHandler) {
-          const response = escapeHandler(escSequence);
-
-          if (response)
-            this.telnet?.write(response);
-        }
-
-        if (!this.opts.stripControls)
-          result += escSequence;
-      }
-    }
-
-    return result;
-  };
 
   get telnet(): Telnet { return this._telnet; }
 }

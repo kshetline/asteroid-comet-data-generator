@@ -6,8 +6,7 @@
 /server/dist
 /server/tsc-out
 /tmp
-asteroids*.json
-comets*.json
+/output*
 
 # dependencies
 /node_modules
