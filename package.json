@@ -20,7 +20,7 @@
     "commander": "^7.2.0",
     "json-z": "^3.3.2",
     "rimraf": "^3.0.2",
-    "telnet-client-ks": "^2.0.0-alpha.0"
+    "telnet-client": "^2.0.0-alpha.0"
   },
   "devDependencies": {
     "@babel/core": "^7.16.5",
