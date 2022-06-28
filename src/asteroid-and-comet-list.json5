@@ -48,7 +48,6 @@
 
     // Check http://www.alpo-astronomy.org/cometblog/, http://www.cometwatch.co.uk/current-observable-comets/ for new comets of interest.
     "C/2020 T2 (Palomar)", "90004550",
-    "C/2020 R4 (ATLAS)", "90004525",
     "C/2019 L3 (ATLAS)", "90004458",
     "29P/Schwassmann-Wachman", "90000395",
     "C/2019 T4 (ATLAS)", "90004474",
@@ -56,7 +55,15 @@
     "67P/Churyumov-Gerasimenko", "90000696",
     "19P/Borrelly", "90000305",
     "2017 K2 (PanSTARRS)", "90004347",
-    "57P/du Toit-Neujman-Delporte", "90000632",
-    "132P/Helin-Roman-Alu", "90001031"
+    "57P/du Toit-Neujmin-Delporte", "90000632",
+    "132P/Helin-Roman-Alu", "90001031",
+    "45P/Honda-Mrkos-Pajdusa", "90000533",
+    "2021 E3 (ZTF)", "90004593",
+    "C/2021 P4 (Atlas)", "90004617",
+    "22P/Kopff", "90000339",
+    "255P/Levy", "90001185",
+    "C/2020 V2 (ZTF)", "90004564",
+    "116P/Wild", "90000990",
+    "C/2021 F1 (Lemmon-PanSTARRS)", "90004594"
   ]
 }
