@@ -46,17 +46,14 @@
     "10P/Tempel 2", "90000215",
     "103P/Hartley 2", "90000934",
 
-    // Check http://www.alpo-astronomy.org/cometblog/, http://www.cometwatch.co.uk/current-observable-comets/ for new comets of interest.
-    "C/2020 T2 (Palomar)", "90004550",
-    "C/2020 R4 (ATLAS)", "90004525",
-    "C/2019 L3 (ATLAS)", "90004458",
-    "29P/Schwassmann-Wachman", "90000395",
-    "C/2019 T4 (ATLAS)", "90004474",
-    "C/2021 A1 (Leonard)", "90004568",
-    "67P/Churyumov-Gerasimenko", "90000696",
-    "19P/Borrelly", "90000305",
-    "2017 K2 (PanSTARRS)", "90004347",
-    "57P/du Toit-Neujman-Delporte", "90000632",
-    "132P/Helin-Roman-Alu", "90001031"
+    // Check https://theskylive.com/comets, https://www.alpo-astronomy.org/Comets for new comets of interest.
+    "217P/LINEAR", "90001181",
+    "240P/NEAT", "90001208",
+    "C/2021 G2 (ATLAS)", "90004682",
+    "C/2022 E2 (ATLAS)", "90004743",
+    "C/2022 N2 (PANSTARRS)", "90004757",
+    "C/2025 F2 (SWAN)", "90004910",
+    "C/2025 K1 (ATLAS)", "90004912",
+    "P/2010 H2 (Vales)", "90004089",
   ]
 }
